@@ -126,6 +126,50 @@ Check("CLI rejects invalid requests and preserves memory on failed save", () => 
     var failure = TaskCommands.Execute(["edit", "--id", original.Id, "--name", "Changed"], tasks, _ => throw new IOException("Locked"), At(23));
     Equal(false, failure.Success); Equal(original, tasks[0]); Equal("Dishwasher", tasks[0].Name);
 });
+Check("Sound alert columns round-trip and older task files keep defaults", () => {
+    var folder = Path.Combine(AppContext.BaseDirectory, "csv-check"); Directory.CreateDirectory(folder);
+    var file = Path.Combine(folder, "sound.csv"); var store = new TaskStore(file);
+    var t = Task(); t.SoundEnabled = true; t.SoundFile = "chime.wav";
+    store.Save([t]); var copy = store.Load().Single();
+    Equal(true, copy.SoundEnabled); Equal("chime.wav", copy.SoundFile);
+    var lines = File.ReadAllLines(file); var header = lines[0].Split(',');
+    var drop = header.Select((h, i) => (h, i)).Where(x => x.h is "SoundEnabled" or "SoundFile").Select(x => x.i).ToArray();
+    File.WriteAllLines(file, lines.Select(l => string.Join(",", l.Split(',').Where((_, i) => !drop.Contains(i)))));
+    var old = store.Load().Single();
+    Equal(false, old.SoundEnabled); Equal("", old.SoundFile); Equal(t.Name, old.Name);
+});
+Check("Sound library lists top-level wav files and rejects unsafe names", () => {
+    var root = Path.Combine(AppContext.BaseDirectory, "sound-check"); var folder = Path.Combine(root, SoundLibrary.FolderName);
+    if (Directory.Exists(root)) Directory.Delete(root, true);
+    Directory.CreateDirectory(Path.Combine(folder, "nested"));
+    foreach (var name in new[] { "chime.wav", "Bell.WAV", "notes.txt" }) File.WriteAllBytes(Path.Combine(folder, name), [0]);
+    File.WriteAllBytes(Path.Combine(folder, "nested", "deep.wav"), [0]);
+    Equal("Bell.WAV,chime.wav", string.Join(",", SoundLibrary.Names(root)));
+    Equal(true, SoundLibrary.ValidName("chime.wav"));
+    foreach (var bad in new[] { "", " ", "../chime.wav", "sounds/chime.wav", @"\chime.wav", "chime.mp3", "chime.wav.zip" }) Equal(false, SoundLibrary.ValidName(bad));
+    Equal(Path.Combine(folder, "chime.wav"), SoundLibrary.Resolve(root, "chime.wav"));
+    Equal<string?>(null, SoundLibrary.Resolve(root, "missing.wav"));
+    Equal<string?>(null, SoundLibrary.Resolve(root, "../chime.wav"));
+});
+Check("Sound alert validation requires a sounds folder wav", () => {
+    var t = Task(); t.SoundEnabled = true;
+    foreach (var bad in new[] { "", "../chime.wav", "chime.mp3" })
+    {
+        t.SoundFile = bad;
+        try { t.Validate(); throw new Exception("Accepted an invalid sound file: " + bad); } catch (ArgumentException) { }
+    }
+    t.SoundFile = "chime.wav"; t.Validate();
+    t.SoundEnabled = false; t.SoundFile = "kept-name"; t.Validate();
+});
+Check("CLI sets and clears the sound alert", () => {
+    var tasks = new List<TaskItem>();
+    CommandResult Run(params string[] a) => TaskCommands.Execute(a, tasks, _ => { }, At(23));
+    var added = Run("add", "--name", "Sound task", "--sound", "chime.wav");
+    Equal(true, added.Success); Equal(true, tasks[0].SoundEnabled); Equal("chime.wav", tasks[0].SoundFile);
+    Equal(false, Run("edit", "--id", added.Output, "--sound", "../chime.wav").Success);
+    Equal(true, Run("edit", "--id", added.Output, "--sound", "off").Success);
+    Equal(false, tasks[0].SoundEnabled); Equal("", tasks[0].SoundFile);
+});
 Console.WriteLine($"All {passed} behavior checks passed.");
 if (args.Length == 2 && args[0] == "--seed-preview")
 {

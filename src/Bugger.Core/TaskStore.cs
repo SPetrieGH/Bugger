@@ -10,13 +10,17 @@ public sealed class TaskStore(string path)
     private static readonly PropertyInfo[] Columns = typeof(TaskItem).GetProperties()
         .Where(p => p.CanRead && p.CanWrite).ToArray();
 
+    // Columns added after the first release: older task files omit them and keep safe defaults.
+    private static readonly string[] OptionalColumns =
+        [nameof(TaskItem.SnoozedUntil), nameof(TaskItem.SoundEnabled), nameof(TaskItem.SoundFile)];
+
     public List<TaskItem> Load()
     {
         if (!File.Exists(path)) return [];
         using var reader = new TextFieldParser(path, Encoding.UTF8) { HasFieldsEnclosedInQuotes = true, TrimWhiteSpace = false };
         reader.SetDelimiters(",");
         var header = reader.ReadFields() ?? throw new FormatException("The task file has no header.");
-        if (!Columns.Where(p => p.Name != nameof(TaskItem.SnoozedUntil)).All(p => header.Contains(p.Name))) throw new FormatException("The task file is missing required columns. Keep it unchanged and restore tasks.csv.bak if needed.");
+        if (!Columns.Where(p => !OptionalColumns.Contains(p.Name)).All(p => header.Contains(p.Name))) throw new FormatException("The task file is missing required columns. Keep it unchanged and restore tasks.csv.bak if needed.");
         var result = new List<TaskItem>();
         while (!reader.EndOfData)
         {

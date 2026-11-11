@@ -2,7 +2,7 @@
 
 A small portable Windows reminder app with weekly and one-time tasks, snoozing, rollover, a tray icon, and command line support. Tasks and progress stay in a readable CSV file beside the executable.
 
-Version 0.3.0. Download the compiled Windows x64 app from [GitHub Releases](https://github.com/Mofman1/Bugger/releases/latest). Choose `Bugger.exe` for the standalone app or the ZIP for the app, instructions, and license. The .NET runtime is included. The executable is unsigned, so Windows may show a SmartScreen warning. Release assets include SHA-256 checksums.
+Version 0.4.0. Download the compiled Windows x64 app from [GitHub Releases](https://github.com/Mofman1/Bugger/releases/latest). Choose `Bugger.exe` for the standalone app or the ZIP for the app, instructions, and license. The .NET runtime is included. The executable is unsigned, so Windows may show a SmartScreen warning. Release assets include SHA-256 checksums.
 
 For updates, exit Bugger and replace only `Bugger.exe`, keeping your `tasks.csv` and `settings.txt`. Build from source using the Development instructions below. Generated executables and personal task files are excluded from the source repository.
 
@@ -17,6 +17,8 @@ Choose **New task** to set a name, weekly days or a one-time date, first reminde
 Closing the main window keeps the application running in the tray. Double-click its tray icon to reopen it. Right-click the icon for Open, New task, and Exit. Windows may put the icon in its hidden tray icons area. Use Exit to stop reminders completely. Startup registration is left to you.
 
 Normal reminders close after 15 seconds and return at the task's cadence until Done or the allowance is exhausted. Hover over one to pause its timeout. Important reminders ding and stay open until Done or Snooze. Closing an important reminder snoozes it for 15 minutes. Snooze choices are 15 minutes, 30 minutes, and 1 hour.
+
+Any task can also play its own sound alert. Turn on **Play sound** in the task editor and choose a `.wav` file from the `sounds` folder. Important reminders keep their Windows ding in addition to the chosen sound. The **Play** button previews the selected file, and unchecking **Play sound** silences the task without forgetting its file. If the folder has no `.wav` files, the sound controls stay disabled until you add some.
 
 Three separate reminder windows can be visible at once. Other tasks wait without consuming their reminder attempts. Mark tasks done from their popup or the main window. Outstanding tasks remain visible even after the day's allowance is used.
 
@@ -43,6 +45,7 @@ The app creates these beside the executable:
 - `tasks.csv`: all task definitions and saved reminder progress. Back up this file to keep your tasks.
 - `tasks.csv.bak`: previous successful save, for recovery.
 - `settings.txt`: application name and normal popup duration.
+- `sounds\`: optional folder of `.wav` files offered by the task editor. Only files directly in this folder are listed. The published download includes `chime.wav` as a starting point; add or remove files at any time, or delete the folder to use only the Windows ding.
 
 Exit before manually editing or replacing files. If the CSV cannot be read, the application reports the problem and leaves it untouched. For recovery, exit, preserve the damaged file, and copy `tasks.csv.bak` to `tasks.csv`.
 
@@ -52,7 +55,7 @@ To rename the application in its UI, exit and change `Name=Bugger` in `settings.
 
 ## CSV columns
 
-Ordinary settings are `Name`, `Enabled`, `OneTime`, `Weekdays`, `OneTimeDate`, `StartTime`, `IntervalMinutes`, `TotalReminders`, `Important`, `RolloverEnabled`, and `RolloverDays`. Empty rollover days means unlimited when rollover is enabled. Weekdays use English three-letter names separated by spaces. Dates use `yyyy-MM-dd HH:mm:ss`, times use `HH:mm:ss`, booleans use `True` or `False`.
+Ordinary settings are `Name`, `Enabled`, `OneTime`, `Weekdays`, `OneTimeDate`, `StartTime`, `IntervalMinutes`, `TotalReminders`, `Important`, `RolloverEnabled`, `RolloverDays`, `SoundEnabled`, and `SoundFile`. `SoundFile` stores only a file name from the `sounds` folder, never a path. Empty rollover days means unlimited when rollover is enabled. Weekdays use English three-letter names separated by spaces. Dates use `yyyy-MM-dd HH:mm:ss`, times use `HH:mm:ss`, booleans use `True` or `False`.
 
 Other columns are maintained by the application: stable `Id`, `CreatedOn`, `EvaluatedDate`, `OccurrenceDate`, `OriginalDueDate`, `RemindersShown`, `NextReminderAt`, `CompletedAt`, `SnoozedUntil`, `ImportantPending`, `Status`, `ActiveStart`, `ActiveInterval`, `ActiveTotal`, `ActiveRollover`, `ActiveRolloverDays`, and `WindowEnd`. Active fields preserve the current schedule while edits wait for the next occurrence. SnoozedUntil keeps the tray status accurate after a restart. Older files without this column are read safely and gain it on the next save. CSV quoting supports commas, quotes, and multiline task names.
 
@@ -80,6 +83,8 @@ PowerShell examples (piping output makes PowerShell wait for this Windows GUI ex
 .\Bugger.exe help | Out-String
 .\Bugger.exe list | ConvertFrom-Json
 .\Bugger.exe add --name "Unload dishwasher" --days Mon,Tue,Wed,Thu,Fri --time 12:00 --interval 30 --count 5 | Out-String
+.\Bugger.exe add --name "Bean time" --days Mon --time 15:00 --sound chime.wav | Out-String
+.\Bugger.exe edit --id TASK_ID --sound off | Out-String
 .\Bugger.exe add --name "Appointment" --date 2026-12-01 --time 09:00 --count 1 --important true | Out-String
 .\Bugger.exe edit --id TASK_ID --time 13:00 --rollover unlimited | Out-String
 .\Bugger.exe complete --id TASK_ID | Out-String

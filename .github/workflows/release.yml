@@ -32,6 +32,10 @@ jobs:
           "RELEASE_TAG=$tag" >> $env:GITHUB_ENV
           New-Item -ItemType Directory -Path release-package, release-assets | Out-Null
           Copy-Item outputs/Bugger/Bugger.exe, README.md, LICENSE -Destination release-package
+          if (Test-Path sounds) {
+            New-Item -ItemType Directory -Path release-package/sounds | Out-Null
+            Copy-Item sounds/*.wav -Destination release-package/sounds
+          }
           Copy-Item outputs/Bugger/Bugger.exe -Destination release-assets
           Compress-Archive -Path release-package/* -DestinationPath "release-assets/Bugger-$tag-win-x64.zip"
           Get-ChildItem release-assets -File | ForEach-Object {
@@ -43,7 +47,7 @@ jobs:
 
           Download Bugger.exe for the standalone app, or Bugger-$tag-win-x64.zip for the app, instructions, and license. Keep it in a writable folder and run Bugger.exe. No installation is required.
 
-          Weekly and one-time reminders, snooze, daily rollover, collapsible task groups, blue beetle tray status, and command line support. Tasks and progress are stored locally in tasks.csv.
+          Weekly and one-time reminders, snooze, daily rollover, collapsible task groups, blue beetle tray status, optional sound alerts from wav files in the sounds folder, and command line support. Tasks and progress are stored locally in tasks.csv.
 
           To update an existing copy, exit Bugger and replace only Bugger.exe. Keep tasks.csv and settings.txt.
 

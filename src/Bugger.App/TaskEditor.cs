@@ -1,4 +1,5 @@
 using Bugger.Core;
+using System.Media;
 
 namespace Bugger.App;
 
@@ -18,6 +19,12 @@ internal sealed class TaskEditor : Form
     private readonly CheckBox[] weekdays = Enumerable.Range(0, 7).Select(i => new CheckBox { Text = TaskItem.DayNames[(i + 1) % 7], AutoSize = true, Margin = new Padding(0, 2, 3, 2) }).ToArray();
     private readonly Label last = new() { AutoSize = false, Dock = DockStyle.Fill, Height = 34, BackColor = Color.White, BorderStyle = BorderStyle.FixedSingle, Padding = new Padding(5) };
     private readonly GroupBox weekdayBox = new() { Text = "Days", Dock = DockStyle.Fill, Height = 52 };
+    private readonly CheckBox sound = new() { Text = "Play sound", AutoSize = true };
+    private readonly ComboBox soundFile = new() { DropDownStyle = ComboBoxStyle.DropDownList, Width = 148 };
+    private readonly Button soundTest;
+    private readonly ToolTip tips = new();
+    private SoundPlayer? preview;
+    private string previewName = "";
     public TaskItem Result { get; private set; }
 
     internal static NumericUpDown Number(int min, int max, int value) => new() { Minimum = min, Maximum = max, Value = value, Dock = DockStyle.Fill };
@@ -41,9 +48,9 @@ internal sealed class TaskEditor : Form
         FormBorderStyle = FormBorderStyle.FixedDialog;
         MaximizeBox = MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(424, 458);
+        ClientSize = new Size(424, 517);
         AutoScaleMode = AutoScaleMode.Dpi;
-        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8), ColumnCount = 2, RowCount = 10 };
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(8), ColumnCount = 2, RowCount = 11 };
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         Controls.Add(layout);
         void Row(Control c, int row, int span = 2) { layout.Controls.Add(c, 0, row); layout.SetColumnSpan(c, span); }
@@ -64,21 +71,56 @@ internal sealed class TaskEditor : Form
         days.Dock = DockStyle.None; days.Width = 65;
         rollFlow.Controls.Add(rollover); rollFlow.SetFlowBreak(rollover, true);
         rollFlow.Controls.Add(LabelFor("Try for")); rollFlow.Controls.Add(days); rollFlow.Controls.Add(LabelFor("extra days")); rollFlow.Controls.Add(unlimited);
-        rollBox.Controls.Add(rollFlow); Row(rollBox, 5); Row(last, 6);
-        var note = LabelFor("Schedule edits apply at the next daily start. Current progress is kept."); note.MaximumSize = new Size(400, 0); Row(note, 7);
+        rollBox.Controls.Add(rollFlow); Row(rollBox, 5);
+        var soundBox = new GroupBox { Text = "Sound alert", Dock = DockStyle.Fill, Height = 52 };
+        var soundFlow = new FlowLayoutPanel { Dock = DockStyle.Fill, Padding = new Padding(5, 2, 0, 0), WrapContents = false };
+        soundTest = ButtonFor("Play", (_, _) => PreviewSound()); soundTest.MinimumSize = new Size(56, 24); soundTest.Margin = new Padding(3, 1, 3, 1);
+        soundFlow.Controls.Add(sound); soundFlow.Controls.Add(soundFile); soundFlow.Controls.Add(soundTest);
+        soundBox.Controls.Add(soundFlow); Row(soundBox, 6); Row(last, 7);
+        var note = LabelFor("Schedule edits apply at the next daily start. Current progress is kept."); note.MaximumSize = new Size(400, 0); Row(note, 8);
         var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Height = 34 };
         var save = ButtonFor("Save task", SaveTask); var cancel = ButtonFor("Cancel", (_, _) => DialogResult = DialogResult.Cancel);
-        buttons.Controls.Add(save); buttons.Controls.Add(cancel); Row(buttons, 8);
+        buttons.Controls.Add(save); buttons.Controls.Add(cancel); Row(buttons, 9);
         AcceptButton = save; CancelButton = cancel;
+        FormClosed += (_, _) => { preview?.Dispose(); preview = null; tips.Dispose(); };
         name.Text = item.Name; schedule.Items.AddRange(["Weekly", "One time"]); schedule.SelectedIndex = item.OneTime ? 1 : 0;
         date.Value = item.OneTimeDate; start.Value = DateTime.Today + item.StartTime;
         interval.Value = item.IntervalMinutes; count.Value = item.TotalReminders; important.Checked = item.Important;
         rollover.Checked = item.RolloverEnabled; unlimited.Checked = !item.RolloverDays.HasValue; days.Value = item.RolloverDays ?? 3;
         foreach (var check in weekdays) check.Checked = item.Weekdays.Split(' ').Contains(check.Text);
+        var sounds = SoundLibrary.Names(AppContext.BaseDirectory);
+        if (sounds.Length == 0)
+        {
+            soundFile.Items.Add("No .wav files in the sounds folder");
+            soundFile.SelectedIndex = 0;
+            soundFile.Enabled = soundTest.Enabled = sound.Enabled = false;
+            tips.SetToolTip(sound, "Add .wav files to the sounds folder beside the application to enable sound alerts.");
+        }
+        else
+        {
+            soundFile.Items.AddRange(sounds.Cast<object>().ToArray());
+            soundFile.SelectedIndex = Math.Max(0, Array.FindIndex(sounds, n => n.Equals(item.SoundFile, StringComparison.OrdinalIgnoreCase)));
+            soundFile.Enabled = soundTest.Enabled = sound.Checked = item.SoundEnabled;
+            tips.SetToolTip(soundFile, "Sounds are read from the sounds folder beside the application.");
+        }
+        sound.CheckedChanged += (_, _) => soundFile.Enabled = soundTest.Enabled = sound.Checked;
         schedule.SelectedIndexChanged += (_, _) => UpdatePreview();
         start.ValueChanged += (_, _) => UpdatePreview(); interval.ValueChanged += (_, _) => UpdatePreview(); count.ValueChanged += (_, _) => UpdatePreview();
         rollover.CheckedChanged += (_, _) => UpdatePreview(); unlimited.CheckedChanged += (_, _) => UpdatePreview();
         UpdatePreview();
+    }
+    private void PreviewSound()
+    {
+        if (soundFile.SelectedItem is not string name) return;
+        var path = SoundLibrary.Resolve(AppContext.BaseDirectory, name);
+        if (path == null) return;
+        if (preview == null || previewName != name)
+        {
+            preview?.Dispose(); preview = null; previewName = name;
+            try { preview = new SoundPlayer(path); preview.Load(); }
+            catch (Exception error) when (error is InvalidOperationException or FileNotFoundException) { preview = null; return; }
+        }
+        preview.Play();
     }
     private void UpdatePreview()
     {
@@ -97,6 +139,8 @@ internal sealed class TaskEditor : Form
         copy.StartTime = new TimeSpan(start.Value.Hour, start.Value.Minute, 0); copy.IntervalMinutes = (int)interval.Value;
         copy.TotalReminders = (int)count.Value; copy.Important = important.Checked; copy.RolloverEnabled = rollover.Checked;
         copy.RolloverDays = unlimited.Checked ? null : (int)days.Value;
+        copy.SoundEnabled = sound.Enabled && sound.Checked;
+        copy.SoundFile = soundFile.Enabled && soundFile.SelectedItem is string soundName ? soundName : "";
         try { copy.Validate(); }
         catch (ArgumentException error) { MessageBox.Show(this, error.Message, Text, MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
         Result = copy; DialogResult = DialogResult.OK;

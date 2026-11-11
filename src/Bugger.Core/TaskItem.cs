@@ -32,6 +32,8 @@ public sealed class TaskItem
     public bool ActiveRollover { get; set; }
     public int? ActiveRolloverDays { get; set; }
     public DateTime? WindowEnd { get; set; }
+    public bool SoundEnabled { get; set; }
+    public string SoundFile { get; set; } = "";
 
     public static readonly string[] DayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
     public bool Scheduled(DateTime day) => OneTime ? day.Date == OneTimeDate.Date
@@ -49,5 +51,6 @@ public sealed class TaskItem
         if ((long)(TotalReminders - 1) * IntervalMinutes >= 1440)
             throw new ArgumentException("The last reminder must be before the next daily start. Reduce the interval or total reminders.");
         if (RolloverDays is < 1 or > 36500) throw new ArgumentException("Rollover days must be between 1 and 36500, or unlimited.");
+        if (SoundEnabled && !SoundLibrary.ValidName(SoundFile)) throw new ArgumentException("Choose a .wav file from the sounds folder, or turn off the sound alert.");
     }
 }

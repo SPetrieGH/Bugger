@@ -7,7 +7,7 @@ public sealed record CommandResult(bool Success, string Output);
 
 public static class TaskCommands
 {
-    public const string Help = "Commands: help, list, add, edit, complete, pause, resume, delete\nUse --id ID for existing tasks. add requires --name NAME.\nOptions: --name TEXT --days Mon,Tue --date yyyy-MM-dd --time HH:mm\n--interval MINUTES --count NUMBER --important true|false --rollover off|unlimited|DAYS\nlist returns JSON. add/edit return the task ID. Changes save immediately.\nWhen the application is closed, commands update storage without starting reminders.";
+    public const string Help = "Commands: help, list, add, edit, complete, pause, resume, delete\nUse --id ID for existing tasks. add requires --name NAME.\nOptions: --name TEXT --days Mon,Tue --date yyyy-MM-dd --time HH:mm\n--interval MINUTES --count NUMBER --important true|false --rollover off|unlimited|DAYS\n--sound FILE.wav|off (a .wav file in the sounds folder beside the application)\nlist returns JSON. add/edit return the task ID. Changes save immediately.\nWhen the application is closed, commands update storage without starting reminders.";
 
     // Work on copies so invalid requests and failed saves never alter live state.
     public static CommandResult Execute(string[] args, List<TaskItem> tasks, Action<List<TaskItem>> save, DateTime now)
@@ -26,8 +26,8 @@ public static class TaskCommands
             var allowed = command switch
             {
                 "list" => Array.Empty<string>(),
-                "add" => ["name", "days", "date", "time", "interval", "count", "important", "rollover"],
-                "edit" => ["id", "name", "days", "date", "time", "interval", "count", "important", "rollover"],
+                "add" => ["name", "days", "date", "time", "interval", "count", "important", "rollover", "sound"],
+                "edit" => ["id", "name", "days", "date", "time", "interval", "count", "important", "rollover", "sound"],
                 "complete" or "pause" or "resume" or "delete" => ["id"],
                 _ => throw new ArgumentException("Unknown command. Use help for usage.")
             };
@@ -52,6 +52,12 @@ public static class TaskCommands
                 if (options.TryGetValue("count", out var count)) task.TotalReminders = int.Parse(count, CultureInfo.InvariantCulture);
                 if (options.TryGetValue("important", out var important)) task.Important = bool.Parse(important);
                 if (options.TryGetValue("rollover", out var rollover)) { task.RolloverEnabled = rollover != "off"; task.RolloverDays = rollover is "off" or "unlimited" ? null : int.Parse(rollover, CultureInfo.InvariantCulture); }
+                if (options.TryGetValue("sound", out var sound))
+                {
+                    if (sound.Equals("off", StringComparison.OrdinalIgnoreCase)) { task.SoundEnabled = false; task.SoundFile = ""; }
+                    else if (SoundLibrary.ValidName(sound)) { task.SoundFile = sound; task.SoundEnabled = true; }
+                    else throw new ArgumentException("Use --sound FILE.wav from the sounds folder, or --sound off.");
+                }
                 task.Validate();
                 if (command == "add") updated.Add(task);
             }

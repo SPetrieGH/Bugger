@@ -19,6 +19,19 @@ internal static class Program
             tasks.Add(task);
         }
         tasks.Add(new TaskItem { Id = "future", Name = "Future appointment", CreatedOn = now.Date, OneTime = true, OneTimeDate = now.Date.AddDays(10) });
+        // Use the shipped chime when the repository is present, otherwise a silent wave file.
+        var soundFolder = Path.Combine(AppContext.BaseDirectory, SoundLibrary.FolderName);
+        Directory.CreateDirectory(soundFolder);
+        var soundPath = Path.Combine(soundFolder, "chime.wav");
+        var shippedSound = FindRepoFile(Path.Combine("sounds", "chime.wav"));
+        if (shippedSound != null)
+        {
+            File.Copy(shippedSound, soundPath + ".new", true);
+            File.Move(soundPath + ".new", soundPath, true);
+            using var loaded = new System.Media.SoundPlayer(soundPath); loaded.Load();
+        }
+        else File.WriteAllBytes(soundPath, SilentWav());
+        tasks[0].SoundEnabled = true; tasks[0].SoundFile = "chime.wav";
         var path = Path.Combine(AppContext.BaseDirectory, "tasks.csv");
         new TaskStore(path).Save(tasks);
         new AppSettings { PopupSeconds = 15 }.Save();
@@ -28,6 +41,26 @@ internal static class Program
         string? failure = null;
         static void Assert(bool condition, string message) { if (!condition) throw new Exception(message); }
         static IEnumerable<Control> Descendants(Control control) => control.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(Descendants(c)));
+        static string? FindRepoFile(string relative)
+        {
+            for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir != null; dir = dir.Parent)
+            {
+                var candidate = Path.Combine(dir.FullName, relative);
+                if (File.Exists(candidate)) return candidate;
+            }
+            return null;
+        }
+        static byte[] SilentWav()
+        {
+            const int rate = 8000, samples = 400; var data = samples * 2;
+            using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream);
+            writer.Write("RIFF"u8.ToArray()); writer.Write(36 + data); writer.Write("WAVE"u8.ToArray());
+            writer.Write("fmt "u8.ToArray()); writer.Write(16); writer.Write((short)1); writer.Write((short)1);
+            writer.Write(rate); writer.Write(rate * 2); writer.Write((short)2); writer.Write((short)16);
+            writer.Write("data"u8.ToArray()); writer.Write(data);
+            for (var i = 0; i < samples; i++) writer.Write((short)0);
+            writer.Flush(); return stream.ToArray();
+        }
         static void Exit(MainForm form) => ((ToolStripMenuItem)((ToolStripMenuItem)form.MainMenuStrip!.Items[0]).DropDownItems[^1]).PerformClick();
         void Capture(Form form, string filename)
         {
@@ -64,7 +97,12 @@ internal static class Program
                     Capture(main, "grouped-tasks-rendered");
                     Console.WriteLine("PASS Three separate reminder windows, no overlap, queued attempt not consumed");
                     using var editor = new TaskEditor(saved[0], "Bugger", false);
-                    editor.Show(main); editor.Refresh(); Capture(editor, "editor-rendered"); editor.Close();
+                    editor.Show(main); editor.Refresh(); Capture(editor, "editor-rendered");
+                    var soundCombo = Descendants(editor).OfType<ComboBox>().Single(c => c.Items.Contains("chime.wav"));
+                    Assert(soundCombo.SelectedItem as string == "chime.wav", "Editor did not preselect the saved sound file.");
+                    Assert(soundCombo.Enabled, "Sound file list is disabled for a task with a sound alert.");
+                    Assert(Descendants(editor).OfType<CheckBox>().Single(c => c.Text == "Play sound").Checked, "Editor did not show the saved sound alert.");
+                    editor.Close();
                     var longTask = saved[0].Copy();
                     longTask.Name = "Unload the dishwasher and put everything back in the kitchen cupboards, including the awkward items on the top rack that need drying before putting them away";
                     using var longReminder = new ReminderForm(longTask, new AppSettings(), (_, _) => { });

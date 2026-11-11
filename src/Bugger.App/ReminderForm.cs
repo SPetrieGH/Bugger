@@ -10,6 +10,7 @@ internal sealed class ReminderForm : Form
     private readonly bool important;
     private readonly Action<string, int?> respond;
     private bool silentClose;
+    private SoundPlayer? player;
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 250 };
     private int remaining;
     protected override bool ShowWithoutActivation => true;
@@ -44,9 +45,18 @@ internal sealed class ReminderForm : Form
             if (important || RectangleToScreen(ClientRectangle).Contains(Cursor.Position)) return;
             if (--remaining <= 0) CloseSilently();
         };
-        Shown += (_, _) => { timer.Start(); if (important) SystemSounds.Exclamation.Play(); };
+        Shown += (_, _) => { timer.Start(); if (important) SystemSounds.Exclamation.Play(); player = PlayAlertSound(task); };
         FormClosing += (_, _) => { if (!silentClose && important) respond(TaskId, 15); };
-        FormClosed += (_, _) => timer.Dispose();
+        FormClosed += (_, _) => { timer.Dispose(); player?.Dispose(); player = null; };
+    }
+    // A missing, unreadable, or invalid sound file must never block the reminder itself.
+    private static SoundPlayer? PlayAlertSound(TaskItem task)
+    {
+        if (!task.SoundEnabled) return null;
+        var path = SoundLibrary.Resolve(AppContext.BaseDirectory, task.SoundFile);
+        if (path == null) return null;
+        try { var sound = new SoundPlayer(path); sound.Play(); return sound; }
+        catch (Exception error) when (error is InvalidOperationException or FileNotFoundException or IOException) { return null; }
     }
     private void Finish(int? minutes) { respond(TaskId, minutes); CloseSilently(); }
     public void CloseSilently() { silentClose = true; Close(); }

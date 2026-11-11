@@ -6,7 +6,7 @@
     <AssemblyName>$(AppDisplayName)</AssemblyName>
     <Product>$(AppDisplayName)</Product>
     <Title>$(AppDisplayName)</Title>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <ApplicationIcon>Assets/app.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup><ProjectReference Include="../Bugger.Core/Bugger.Core.csproj" /></ItemGroup>

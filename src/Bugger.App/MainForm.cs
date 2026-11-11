@@ -161,7 +161,7 @@ internal sealed class MainForm : Form
     private void Duplicate()
     {
         if (Selected is not { } selected) return;
-        var copy = new TaskItem { Name = selected.Name + " (copy)", OneTime = selected.OneTime, OneTimeDate = selected.OneTimeDate, Weekdays = selected.Weekdays, StartTime = selected.StartTime, IntervalMinutes = selected.IntervalMinutes, TotalReminders = selected.TotalReminders, Important = selected.Important, RolloverEnabled = selected.RolloverEnabled, RolloverDays = selected.RolloverDays };
+        var copy = new TaskItem { Name = selected.Name + " (copy)", OneTime = selected.OneTime, OneTimeDate = selected.OneTimeDate, Weekdays = selected.Weekdays, StartTime = selected.StartTime, IntervalMinutes = selected.IntervalMinutes, TotalReminders = selected.TotalReminders, Important = selected.Important, RolloverEnabled = selected.RolloverEnabled, RolloverDays = selected.RolloverDays, SoundEnabled = selected.SoundEnabled, SoundFile = selected.SoundFile };
         using var editor = new TaskEditor(copy, settings.Name, true);
         if (editor.ShowDialog(this) == DialogResult.OK)
         {
@@ -216,7 +216,7 @@ internal sealed class MainForm : Form
         if (t == null) { details.Text = tasks.Count == 0 ? "No tasks yet.\n\nChoose New task to begin." : $"{tasks.Count} tasks saved.\n\nSelect a task to see its schedule. Expand a group with its plus button."; return; }
         var next = TaskView.NextScheduledStart(t, DateTime.Now);
         var state = !t.Enabled ? "Paused" : t.Status == "Done" ? "Done at " + t.CompletedAt?.ToString("HH:mm") : t.Status == "Pending" ? $"{t.RemindersShown} of {t.ActiveTotal} reminders shown" : next.HasValue ? "Next: " + next.Value.ToString("ddd d MMM, HH:mm") : "No future occurrence";
-        details.Text = $"{t.Name}\n\n{t.ScheduleSummary} · {t.StartTime.ToString(@"hh\:mm")}\n{t.TotalReminders} reminders, every {t.IntervalMinutes} min\n\nRollover: {(t.RolloverEnabled ? t.RolloverDays.HasValue ? $"up to {t.RolloverDays} extra days" : "unlimited" : "off")}\n{state}";
+        details.Text = $"{t.Name}\n\n{t.ScheduleSummary} · {t.StartTime.ToString(@"hh\:mm")}\n{t.TotalReminders} reminders, every {t.IntervalMinutes} min\n\nRollover: {(t.RolloverEnabled ? t.RolloverDays.HasValue ? $"up to {t.RolloverDays} extra days" : "unlimited" : "off")}\nSound: {(t.SoundEnabled && t.SoundFile.Length > 0 ? t.SoundFile : "off")}\n{state}";
     }
     private void Settings()
     {
