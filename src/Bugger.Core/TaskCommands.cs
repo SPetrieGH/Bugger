@@ -7,7 +7,7 @@ public sealed record CommandResult(bool Success, string Output);
 
 public static class TaskCommands
 {
-    public const string Help = "Commands: help, list, add, edit, complete, pause, resume, delete\nUse --id ID for existing tasks. add requires --name NAME.\nOptions: --name TEXT --days Mon,Tue --date yyyy-MM-dd --time HH:mm\n--interval MINUTES --count NUMBER --important true|false --rollover off|unlimited|DAYS\n--sound FILE.wav|off (a .wav file in the sounds folder beside the application)\nlist returns JSON. add/edit return the task ID. Changes save immediately.\nWhen the application is closed, commands update storage without starting reminders.";
+    public const string Help = "Commands: help, list, add, edit, complete, undo, pause, resume, delete\nUse --id ID for existing tasks. add requires --name NAME.\nOptions: --name TEXT --days Mon,Tue --date yyyy-MM-dd --time HH:mm\n--interval MINUTES --count NUMBER --important true|false --rollover off|unlimited|DAYS\n--sound FILE.wav|off (a .wav file in the sounds folder beside the application)\nundo reopens a completed task. list returns JSON. add/edit return the task ID. Changes save immediately.\nWhen the application is closed, commands update storage without starting reminders.";
 
     // Work on copies so invalid requests and failed saves never alter live state.
     public static CommandResult Execute(string[] args, List<TaskItem> tasks, Action<List<TaskItem>> save, DateTime now)
@@ -28,11 +28,11 @@ public static class TaskCommands
                 "list" => Array.Empty<string>(),
                 "add" => ["name", "days", "date", "time", "interval", "count", "important", "rollover", "sound"],
                 "edit" => ["id", "name", "days", "date", "time", "interval", "count", "important", "rollover", "sound"],
-                "complete" or "pause" or "resume" or "delete" => ["id"],
+                "complete" or "undo" or "pause" or "resume" or "delete" => ["id"],
                 _ => throw new ArgumentException("Unknown command. Use help for usage.")
             };
             foreach (var key in options.Keys) if (!allowed.Contains(key, StringComparer.OrdinalIgnoreCase)) throw new ArgumentException("Unknown option: --" + key);
-            if (command == "list") return new(true, JsonSerializer.Serialize(tasks, new JsonSerializerOptions { WriteIndented = true }));
+            if (command == "list") return new(true, JsonSerializer.Serialize(tasks.Where(t => !TaskView.Retired(t, now)), new JsonSerializerOptions { WriteIndented = true }));
             var updated = tasks.Select(t => t.Copy()).ToList();
             var task = command == "add" ? new TaskItem { CreatedOn = now.Date } : updated.SingleOrDefault(t => t.Id == options.GetValueOrDefault("id"))
                 ?? throw new ArgumentException("Supply an existing task ID with --id. Use list to find IDs.");
@@ -70,6 +70,12 @@ public static class TaskCommands
                 if (task.Status != "Pending") throw new ArgumentException("This task has no outstanding occurrence to complete.");
                 Scheduler.Done(task, now);
             }
+            if (command == "undo")
+            {
+                if (task.Status != "Done") throw new ArgumentException("This task is not completed.");
+                Scheduler.Undo(task, now);
+            }
+            updated.RemoveAll(t => TaskView.Retired(t, now));
             save(updated);
             tasks.Clear(); tasks.AddRange(updated);
             return new(true, task.Id);

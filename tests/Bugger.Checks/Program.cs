@@ -170,6 +170,50 @@ Check("CLI sets and clears the sound alert", () => {
     Equal(true, Run("edit", "--id", added.Output, "--sound", "off").Success);
     Equal(false, tasks[0].SoundEnabled); Equal("", tasks[0].SoundFile);
 });
+Check("Completed tasks stay for their day, then leave the list", () => {
+    var t = Task(); t.Weekdays = "Fri Sat"; Scheduler.Advance(t, At(23)); Scheduler.Done(t, At(23, 13));
+    Equal(true, TaskView.Listed(t, At(23, 18))); Equal(true, TaskView.VisibleToday(t, At(23, 18)));
+    Equal(false, TaskView.Listed(t, At(24, 9)));
+    Scheduler.Advance(t, At(24, 12));
+    Equal(true, TaskView.Listed(t, At(24, 12))); Equal(true, TaskView.VisibleToday(t, At(24, 12)));
+});
+Check("Undo reopens a completed task with its remaining allowance", () => {
+    var t = Task(); t.TotalReminders = 3; Scheduler.Advance(t, At(23)); Scheduler.Shown(t, At(23)); Scheduler.Done(t, At(23, 12, 10));
+    Equal("Done", t.Status); Equal<DateTime?>(null, t.NextReminderAt);
+    Scheduler.Undo(t, At(23, 12, 20));
+    Equal("Pending", t.Status); Equal<DateTime?>(null, t.CompletedAt); Equal(1, t.RemindersShown);
+    Equal(true, Scheduler.Due(t, At(23, 12, 20))); Equal(true, TaskView.Listed(t, At(23, 12, 20)));
+    try { Scheduler.Undo(t, At(23, 12, 21)); throw new Exception("Undo accepted a pending task"); } catch (InvalidOperationException) { }
+    var spent = Task(); spent.TotalReminders = 1; Scheduler.Advance(spent, At(23)); Scheduler.Shown(spent, At(23)); Scheduler.Done(spent, At(23, 13));
+    Scheduler.Undo(spent, At(23, 13, 5));
+    Equal("Pending", spent.Status); Equal(false, Scheduler.Due(spent, At(23, 14))); Equal(true, TaskView.Listed(spent, At(23, 14)));
+});
+Check("Finished one-time tasks retire the next day while recurring records stay", () => {
+    var finished = Task(); finished.OneTime = true; finished.OneTimeDate = At(23).Date; finished.TotalReminders = 1;
+    Scheduler.Advance(finished, At(23)); Scheduler.Done(finished, At(23, 13));
+    Equal(false, TaskView.Retired(finished, At(23, 18))); Equal(true, TaskView.Listed(finished, At(23, 18)));
+    Equal(true, TaskView.Retired(finished, At(24, 9))); Equal(false, TaskView.Listed(finished, At(24, 9)));
+    var weekly = Task(); weekly.Weekdays = "Mon"; Scheduler.Advance(weekly, At(23)); Scheduler.Done(weekly, At(23, 13));
+    Equal(false, TaskView.Retired(weekly, At(30)));
+});
+Check("CLI completes, undoes, and retires finished one-time tasks", () => {
+    var tasks = new List<TaskItem>();
+    CommandResult Run(DateTime now, params string[] a) => TaskCommands.Execute(a, tasks, _ => { }, now);
+    var oneTime = Run(At(23), "add", "--name", "Appointment", "--date", "2026-10-23", "--time", "12:00", "--count", "1");
+    var weekly = Run(At(23), "add", "--name", "Dishwasher", "--days", "Thu,Fri", "--time", "12:00");
+    Equal(true, oneTime.Success); Equal(true, weekly.Success); Equal(2, tasks.Count);
+    Equal(true, Run(At(23, 13), "complete", "--id", oneTime.Output).Success);
+    Equal(2, tasks.Count); Equal("Done", tasks.Single(t => t.Id == oneTime.Output).Status);
+    Equal(true, Run(At(23, 13), "undo", "--id", oneTime.Output).Success);
+    Equal("Pending", tasks.Single(t => t.Id == oneTime.Output).Status);
+    Equal(true, Run(At(23, 13), "complete", "--id", oneTime.Output).Success);
+    Equal(true, Run(At(23, 14), "complete", "--id", weekly.Output).Success);
+    Equal(2, tasks.Count);
+    Equal(false, Run(At(24, 9), "list").Output.Contains("Appointment"));
+    Equal(true, Run(At(24, 9), "list").Output.Contains("Dishwasher"));
+    Equal(true, Run(At(24, 9), "add", "--name", "Replacement", "--days", "Mon").Success);
+    Equal(2, tasks.Count); Equal(false, tasks.Any(t => t.Name == "Appointment")); Equal(true, tasks.Any(t => t.Name == "Dishwasher"));
+});
 Console.WriteLine($"All {passed} behavior checks passed.");
 if (args.Length == 2 && args[0] == "--seed-preview")
 {

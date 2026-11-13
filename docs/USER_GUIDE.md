@@ -18,6 +18,8 @@ Closing the main window keeps the application running in the tray. Double-click 
 
 Normal reminders close after 15 seconds and return at the task's cadence until Done or the allowance is exhausted. Hover over one to pause its timeout. Important reminders ding and stay open until Done or Snooze. Closing an important reminder snoozes it for 15 minutes. Snooze choices are 15 minutes, 30 minutes, and 1 hour.
 
+Completed tasks stay in the list for the rest of their completion day, marked **Done:**, and disappear the next day. With a completed task selected, the button under the details reads **Mark undone**, which puts the task back to outstanding with its remaining reminders. Finished one-time tasks are deleted from `tasks.csv` once their day passes; recurring tasks keep their record and return at their next scheduled day.
+
 Any task can also play its own sound alert. Turn on **Play sound** in the task editor and choose a `.wav` file from the `sounds` folder. Important reminders keep their Windows ding in addition to the chosen sound. The **Play** button previews the selected file, and unchecking **Play sound** silences the task without forgetting its file. If the folder has no `.wav` files, the sound controls stay disabled until you add some.
 
 Three separate reminder windows can be visible at once. Other tasks wait without consuming their reminder attempts. Mark tasks done from their popup or the main window. Outstanding tasks remain visible even after the day's allowance is used.
@@ -88,6 +90,7 @@ PowerShell examples (piping output makes PowerShell wait for this Windows GUI ex
 .\Bugger.exe add --name "Appointment" --date 2026-12-01 --time 09:00 --count 1 --important true | Out-String
 .\Bugger.exe edit --id TASK_ID --time 13:00 --rollover unlimited | Out-String
 .\Bugger.exe complete --id TASK_ID | Out-String
+.\Bugger.exe undo --id TASK_ID | Out-String
 .\Bugger.exe pause --id TASK_ID | Out-String
 .\Bugger.exe resume --id TASK_ID | Out-String
 .\Bugger.exe delete --id TASK_ID | Out-String

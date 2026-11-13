@@ -77,6 +77,17 @@ public static class Scheduler
         t.SnoozedUntil = null;
     }
 
+    public static void Undo(TaskItem t, DateTime now)
+    {
+        if (t.Status != "Done") throw new InvalidOperationException("This task is not completed.");
+        t.Status = "Pending";
+        t.CompletedAt = null;
+        t.SnoozedUntil = null;
+        var open = t.WindowEnd > now;
+        t.ImportantPending = t.Important && open;
+        t.NextReminderAt = open && (t.RemindersShown < t.ActiveTotal || t.ImportantPending) ? now : null;
+    }
+
     public static bool NeedsAttention(TaskItem t, DateTime now) => t.Enabled && t.Status == "Pending"
         && t.WindowEnd > now && !(t.SnoozedUntil > now)
         && (t.RemindersShown > 0 || Due(t, now));

@@ -128,8 +128,23 @@ internal static class Program
                         tree.SelectedNode = node;
                         Descendants(main).OfType<Button>().Single(b => b.Text == "Mark done").PerformClick();
                     }
+                    var doneIds = tasks.Take(4).Select(t => t.Id).ToArray();
+                    var taskNodes = tree.Nodes.Cast<TreeNode>().SelectMany(n => n.Nodes.Cast<TreeNode>())
+                        .Where(n => n.Tag is TaskItem t && doneIds.Contains(t.Id)).ToArray();
+                    Assert(taskNodes.Length == 4, "Completed tasks left the list before their day ended.");
+                    Assert(taskNodes.All(n => n.Text.StartsWith("Done: ")), "Completed tasks are not marked done in the list.");
+                    Capture(main, "done-tasks-rendered");
+                    tree.SelectedNode = taskNodes.Single(n => ((TaskItem)n.Tag!).Id == tasks[0].Id);
+                    var action = Descendants(main).OfType<Button>().Single(b => b.Text is "Mark done" or "Mark undone");
+                    Assert(action.Text == "Mark undone", "Undo option is missing for a completed task.");
+                    action.PerformClick();
+                    Assert(new TaskStore(path).Load().Single(t => t.Id == tasks[0].Id).Status == "Pending", "Mark undone did not reopen the task.");
+                    var reopened = tree.Nodes.Cast<TreeNode>().SelectMany(n => n.Nodes.Cast<TreeNode>()).Single(n => n.Name == tasks[0].Id);
+                    Assert(!reopened.Text.StartsWith("Done: "), "Reopened task still shows as done.");
+                    tree.SelectedNode = reopened;
+                    Descendants(main).OfType<Button>().Single(b => b.Text == "Mark done").PerformClick();
                     Assert(!main.HasAttention, "Tray alert did not clear after completing outstanding tasks.");
-                    Console.WriteLine("PASS Tray alert clears when tasks are completed");
+                    Console.WriteLine("PASS Done tasks stay for the day, undo reopens, tray alert clears");
                     main.Close(); Assert(!main.IsDisposed && !main.Visible, "Closing main window did not return to tray.");
                     main.Show(); Assert(main.Visible, "Main window did not reopen.");
                     Exit(main);
@@ -148,7 +163,10 @@ internal static class Program
             }
             catch (Exception error)
             {
-                failure = error.ToString(); timer.Stop(); main.Dispose(); Application.ExitThread();
+                var forms = string.Join(" | ", Application.OpenForms.Cast<Form>().Select(f => f.GetType().Name + ":" + f.Text));
+                var rows = string.Join(" | ", new TaskStore(path).Load().Select(t => $"{t.Id},{t.Name},{t.Status},{t.Important},{t.RemindersShown},{t.NextReminderAt}"));
+                failure = error + "\nOpen forms: " + forms + "\nTasks: " + rows;
+                timer.Stop(); main.Dispose(); Application.ExitThread();
             }
         };
         main.Shown += (_, _) => timer.Start();

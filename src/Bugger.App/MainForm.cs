@@ -106,7 +106,7 @@ internal sealed class MainForm : Form
         ticking = true;
         try
         {
-            var now = DateTime.Now; var changed = false;
+            var now = DateTime.Now; var changed = tasks.RemoveAll(t => TaskView.Retired(t, now)) > 0;
             foreach (var task in tasks) changed |= Scheduler.Advance(task, now);
             foreach (var pair in popups.ToArray())
             {
@@ -145,8 +145,15 @@ internal sealed class MainForm : Form
     }
     private void Complete()
     {
-        if (Selected is not { Status: "Pending" } task) return;
-        Scheduler.Done(task, DateTime.Now); if (popups.TryGetValue(task.Id, out var popup)) popup.CloseSilently(); Persist(); RefreshList(true); UpdateTray();
+        if (Selected is not { } task) return;
+        if (task.Status == "Done")
+        {
+            Scheduler.Undo(task, DateTime.Now);
+            Persist(); RefreshList(true, task.Id); UpdateTray(); return;
+        }
+        if (task.Status != "Pending") return;
+        Scheduler.Done(task, DateTime.Now); if (popups.TryGetValue(task.Id, out var popup)) popup.CloseSilently();
+        Persist(); RefreshList(true, task.Id); UpdateTray();
     }
     private void Edit(TaskItem? existing)
     {
@@ -183,8 +190,9 @@ internal sealed class MainForm : Form
     private void RefreshList(bool force = false, string? selectId = null)
     {
         var now = DateTime.Now;
-        var today = tasks.Where(t => TaskView.VisibleToday(t, now)).ToArray();
-        var other = tasks.Except(today).ToArray();
+        var listed = tasks.Where(t => TaskView.Listed(t, now)).ToArray();
+        var today = listed.Where(t => TaskView.VisibleToday(t, now)).ToArray();
+        var other = listed.Except(today).ToArray();
         var signature = now.Date + string.Join("|", tasks.Select(t => $"{t.Id}:{t.Name}:{t.Status}:{t.Enabled}:{t.RemindersShown}:{t.NextReminderAt}:{TaskView.VisibleToday(t, now)}"));
         if (!force && signature == viewSignature) return;
         viewSignature = signature; var id = selectId ?? Selected?.Id;
@@ -212,7 +220,9 @@ internal sealed class MainForm : Form
     }
     private void ShowDetails()
     {
-        var t = Selected; done.Enabled = t?.Enabled == true && t.Status == "Pending";
+        var t = Selected;
+        done.Text = t?.Status == "Done" ? "Mark undone" : "Mark done";
+        done.Enabled = t?.Enabled == true && t.Status is "Pending" or "Done";
         if (t == null) { details.Text = tasks.Count == 0 ? "No tasks yet.\n\nChoose New task to begin." : $"{tasks.Count} tasks saved.\n\nSelect a task to see its schedule. Expand a group with its plus button."; return; }
         var next = TaskView.NextScheduledStart(t, DateTime.Now);
         var state = !t.Enabled ? "Paused" : t.Status == "Done" ? "Done at " + t.CompletedAt?.ToString("HH:mm") : t.Status == "Pending" ? $"{t.RemindersShown} of {t.ActiveTotal} reminders shown" : next.HasValue ? "Next: " + next.Value.ToString("ddd d MMM, HH:mm") : "No future occurrence";

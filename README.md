@@ -13,6 +13,7 @@ Set a reminder, choose how often it repeats, then mark it done or snooze it. Bug
 - Weekly or one-time reminders, with optional daily rollover.
 - Important reminders stay open until you act.
 - Optional sound alert per task, played from `.wav` files in a `sounds` folder.
+- Completed tasks stay for the day, can be marked undone, then leave the list.
 - Portable, with your tasks saved locally in a readable CSV file.
 - Classic Windows controls, no account or installation required.
 
